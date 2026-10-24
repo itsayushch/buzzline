@@ -25,7 +25,14 @@ import {
   generateTokenId,
   formatCurrentTime,
 } from "./mockData";
-import { db } from "./firebase";
+import { firestore, db } from "./firebase";
+import {
+  collection,
+  doc,
+  onSnapshot,
+  setDoc,
+  updateDoc,
+} from "firebase/firestore";
 import { ref, onValue, set, update, push } from "firebase/database";
 
 export interface LocationsContextType {
@@ -82,29 +89,24 @@ export function LocationsProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<CanteenStatus>(initialCanteenStatus);
   const [orders, setOrders] = useState<Order[]>(initialOrders);
 
-  // Subscribe to Firebase Realtime Database on mount
+  // Subscribe to Cloud Firestore & Firebase Realtime Database on mount
   useEffect(() => {
+    let unsubFirestoreLoc: (() => void) | undefined;
+    let unsubFirestoreTok: (() => void) | undefined;
+    let unsubFirestoreRes: (() => void) | undefined;
+
+    // 1. Subscribe to Cloud Firestore collections
     try {
-      const locationsRef = ref(db, "locations");
-      const tokensRef = ref(db, "tokens");
-      const reservationsRef = ref(db, "reservations");
-
-      // 1. Subscribe to /locations
-      const unsubscribeLocations = onValue(
-        locationsRef,
+      unsubFirestoreLoc = onSnapshot(
+        collection(firestore, "locations"),
         (snapshot) => {
-          const val = snapshot.val();
-          if (val) {
-            const locList: Location[] = Array.isArray(val)
-              ? val.filter(Boolean)
-              : Object.values(val);
-
-            if (locList.length > 0) {
-              setLocations(locList);
+          if (!snapshot.empty) {
+            const list = snapshot.docs.map((d) => d.data() as Location);
+            if (list.length > 0) {
+              setLocations(list);
               setIsFirebaseLive(true);
 
-              // Update legacy canteen status if canteen exists
-              const canteen = locList.find((l) => l.id === "canteen");
+              const canteen = list.find((l) => l.id === "canteen");
               if (canteen) {
                 setStatus({
                   queueMinutes: canteen.queueMinutes,
@@ -115,61 +117,72 @@ export function LocationsProvider({ children }: { children: ReactNode }) {
             }
           }
         },
-        (error) => {
-          console.warn("Firebase locations onValue error:", error.message);
-          setIsFirebaseLive(false);
+        (err) => {
+          console.warn("Firestore locations listener:", err.message);
         }
       );
 
-      // 2. Subscribe to /tokens
-      const unsubscribeTokens = onValue(
-        tokensRef,
+      unsubFirestoreTok = onSnapshot(
+        collection(firestore, "tokens"),
         (snapshot) => {
-          const val = snapshot.val();
-          if (val) {
-            const tokenList: QueueToken[] = Array.isArray(val)
-              ? val.filter(Boolean)
-              : Object.values(val);
-            setTokens(tokenList.reverse());
-          } else {
-            setTokens([]);
-          }
+          const list = snapshot.docs.map((d) => d.data() as QueueToken);
+          setTokens(list.reverse());
         },
-        (error) => {
-          console.warn("Firebase tokens onValue error:", error.message);
+        (err) => {
+          console.warn("Firestore tokens listener:", err.message);
         }
       );
 
-      // 3. Subscribe to /reservations
-      const unsubscribeReservations = onValue(
-        reservationsRef,
+      unsubFirestoreRes = onSnapshot(
+        collection(firestore, "reservations"),
+        (snapshot) => {
+          const list = snapshot.docs.map((d) => d.data() as DeskReservation);
+          setReservations(list.reverse());
+        },
+        (err) => {
+          console.warn("Firestore reservations listener:", err.message);
+        }
+      );
+    } catch (e) {
+      console.warn("Cloud Firestore initialization notice:", e);
+    }
+
+    // 2. Also listen to Realtime Database if configured
+    try {
+      const locationsRef = ref(db, "locations");
+      const unsubRTDB = onValue(
+        locationsRef,
         (snapshot) => {
           const val = snapshot.val();
           if (val) {
-            const resList: DeskReservation[] = Array.isArray(val)
+            const locList: Location[] = Array.isArray(val)
               ? val.filter(Boolean)
               : Object.values(val);
-            setReservations(resList.reverse());
-          } else {
-            setReservations([]);
+            if (locList.length > 0) {
+              setLocations(locList);
+              setIsFirebaseLive(true);
+            }
           }
         },
-        (error) => {
-          console.warn("Firebase reservations onValue error:", error.message);
-        }
+        () => {}
       );
 
       return () => {
-        unsubscribeLocations();
-        unsubscribeTokens();
-        unsubscribeReservations();
+        unsubFirestoreLoc?.();
+        unsubFirestoreTok?.();
+        unsubFirestoreRes?.();
+        unsubRTDB();
       };
-    } catch (err) {
-      console.warn("Firebase realtime listeners setup failed:", err);
+    } catch {
+      return () => {
+        unsubFirestoreLoc?.();
+        unsubFirestoreTok?.();
+        unsubFirestoreRes?.();
+      };
     }
   }, []);
 
-  // Update a location via /locations/{id}
+  // Update a location via Firestore & Realtime Database
   const updateLocation = async (id: string, updates: Partial<Location>) => {
     const updatedTime = updates.lastUpdated ?? formatCurrentTime();
     const queueMinutes = updates.queueMinutes;
@@ -206,24 +219,27 @@ export function LocationsProvider({ children }: { children: ReactNode }) {
       }));
     }
 
-    // Write to Firebase /locations/{id} via update()
+    const payload: Record<string, any> = {
+      ...updates,
+      lastUpdated: updatedTime,
+      ...(rushLevel ? { rushLevel } : {}),
+    };
+    Object.keys(payload).forEach(
+      (key) => payload[key] === undefined && delete payload[key]
+    );
+
+    // Write to Cloud Firestore
+    try {
+      await setDoc(doc(firestore, "locations", id), payload, { merge: true });
+    } catch (e) {
+      console.warn(`Firestore update failed for locations/${id}:`, e);
+    }
+
+    // Write to Realtime Database
     try {
       const locRef = ref(db, `locations/${id}`);
-      const payload: Record<string, any> = {
-        ...updates,
-        lastUpdated: updatedTime,
-        ...(rushLevel ? { rushLevel } : {}),
-      };
-
-      // Strip undefined keys for RTDB compatibility
-      Object.keys(payload).forEach(
-        (key) => payload[key] === undefined && delete payload[key]
-      );
-
       await update(locRef, payload);
-    } catch (e) {
-      console.warn(`Firebase update failed for /locations/${id}:`, e);
-    }
+    } catch {}
   };
 
   // Push new token to /tokens with status "waiting", then update to "called" after 2s
@@ -239,9 +255,7 @@ export function LocationsProvider({ children }: { children: ReactNode }) {
     const tokenTime = scheduledTime || "In 15 mins";
     const label = studentLabelOrItem || "Student Token";
 
-    const tokensRef = ref(db, "tokens");
-    const newRef = push(tokensRef);
-    const tokenId = newRef.key || generateTokenId("TK");
+    const tokenId = generateTokenId(locationId.substring(0, 3).toUpperCase());
 
     const newToken: QueueToken = {
       id: tokenId,
@@ -269,10 +283,15 @@ export function LocationsProvider({ children }: { children: ReactNode }) {
       setOrders((prev) => [orderEntry, ...prev]);
     }
 
-    // Push token to /tokens in Firebase
-    set(ref(db, `tokens/${tokenId}`), newToken).catch((e) =>
-      console.warn("Firebase token push failed:", e)
+    // Write to Cloud Firestore
+    setDoc(doc(firestore, "tokens", tokenId), newToken).catch((e) =>
+      console.warn("Firestore token push failed:", e)
     );
+
+    // Write to Realtime Database
+    try {
+      set(ref(db, `tokens/${tokenId}`), newToken).catch(() => {});
+    } catch {}
 
     // 2-second client-side timer: transition to "called"
     setTimeout(() => {
@@ -288,9 +307,17 @@ export function LocationsProvider({ children }: { children: ReactNode }) {
         );
       }
 
-      update(ref(db, `tokens/${tokenId}`), { status: "called" }).catch((e) =>
-        console.warn("Firebase token status update failed:", e)
+      // Update in Cloud Firestore
+      updateDoc(doc(firestore, "tokens", tokenId), { status: "called" }).catch(
+        (e) => console.warn("Firestore token status update failed:", e)
       );
+
+      // Update in Realtime Database
+      try {
+        update(ref(db, `tokens/${tokenId}`), { status: "called" }).catch(
+          () => {}
+        );
+      } catch {}
     }, 2000);
 
     return newToken;
@@ -302,9 +329,7 @@ export function LocationsProvider({ children }: { children: ReactNode }) {
     deskLabel: string,
     timeSlot?: string
   ): DeskReservation => {
-    const reservationsRef = ref(db, "reservations");
-    const newRef = push(reservationsRef);
-    const reservationId = newRef.key || generateTokenId("RES");
+    const reservationId = generateTokenId("RES");
     const slot = timeSlot || "Next Available";
 
     const newReservation: DeskReservation = {
@@ -320,10 +345,17 @@ export function LocationsProvider({ children }: { children: ReactNode }) {
     // Optimistic local update
     setReservations((prev) => [newReservation, ...prev]);
 
-    // Push reservation to /reservations in Firebase
-    set(ref(db, `reservations/${reservationId}`), newReservation).catch((e) =>
-      console.warn("Firebase reservation push failed:", e)
+    // Write to Cloud Firestore
+    setDoc(doc(firestore, "reservations", reservationId), newReservation).catch(
+      (e) => console.warn("Firestore reservation push failed:", e)
     );
+
+    // Write to Realtime Database
+    try {
+      set(ref(db, `reservations/${reservationId}`), newReservation).catch(
+        () => {}
+      );
+    } catch {}
 
     // 2-second client-side timer: transition to "confirmed"
     setTimeout(() => {
@@ -333,11 +365,19 @@ export function LocationsProvider({ children }: { children: ReactNode }) {
         )
       );
 
-      update(ref(db, `reservations/${reservationId}`), {
+      // Update in Cloud Firestore
+      updateDoc(doc(firestore, "reservations", reservationId), {
         status: "confirmed",
       }).catch((e) =>
-        console.warn("Firebase reservation status update failed:", e)
+        console.warn("Firestore reservation status update failed:", e)
       );
+
+      // Update in Realtime Database
+      try {
+        update(ref(db, `reservations/${reservationId}`), {
+          status: "confirmed",
+        }).catch(() => {});
+      } catch {}
     }, 2000);
 
     return newReservation;
