@@ -1,32 +1,73 @@
+export type LocationType =
+  | "canteen"
+  | "library"
+  | "print-hub"
+  | "registrar"
+  | "clinic"
+  | "gym";
+
 export type ServiceCategory =
   | "canteen"
   | "library"
   | "xerox"
   | "admin"
   | "clinic"
-  | "gym";
+  | "gym"
+  | "print-hub"
+  | "registrar";
 
-export type CampusService = {
+export type RushLevel = "Low" | "Moderate" | "High";
+
+export type Location = {
   id: string;
   name: string;
+  type: LocationType;
   category: ServiceCategory;
+  queueMinutes: number;
+  capacity: number;
+  spotsAvailable: number;
+  rushLevel: RushLevel;
+  lastUpdated: string;
   icon: string;
   location: string;
-  queueMinutes: number;
-  rushLevel: "Low" | "Moderate" | "High";
-  lastUpdated: string;
   detailsLabel: string;
   items: string[];
+  menu?: string[];
 };
 
-export type QueueTicket = {
+// CampusService is an alias/superset of Location for full backward compatibility
+export type CampusService = Location;
+
+export type QueueTokenStatus =
+  | "waiting"
+  | "called"
+  | "completed"
+  | "pending"
+  | "confirmed";
+
+export type QueueToken = {
   id: string;
-  serviceId: string;
-  serviceName: string;
-  itemOrPurpose: string;
-  scheduledTime: string;
-  status: "pending" | "confirmed";
+  locationId: string;
+  studentLabel?: string;
+  serviceName?: string;
+  itemOrPurpose?: string;
+  scheduledTime?: string;
+  status: QueueTokenStatus;
+  claimedAt?: string;
   tokenNumber?: number;
+};
+
+// QueueTicket is an alias of QueueToken for full backward compatibility
+export type QueueTicket = QueueToken;
+
+export type DeskReservation = {
+  id: string;
+  locationId: string;
+  deskLabel: string;
+  reservedFor: string;
+  timeSlot?: string;
+  status: "pending" | "confirmed";
+  createdAt?: string;
 };
 
 // Legacy Canteen aliases for backward compatibility

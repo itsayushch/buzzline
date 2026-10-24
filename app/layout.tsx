@@ -1,22 +1,14 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { GeistSans } from "geist/font/sans";
+import { GeistMono } from "geist/font/mono";
 import "./globals.css";
-import { CanteenProvider } from "@/lib/canteenContext";
+import { LocationsProvider } from "@/lib/locationsContext";
 import { Navbar } from "@/components/Navbar";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
 export const metadata: Metadata = {
-  title: "Buzzline - Campus Canteen & Room Tracker",
-  description: "Live canteen wait times, quick pickup orders, and room availability",
+  title: "Buzzline - Campus Real-Time Queue & Fast-Pass Hub",
+  description:
+    "Real-time campus queue wait times, digital tokens, and study desk reservations across canteens, libraries, print hubs, registrar desks, clinics, and gyms.",
 };
 
 export default function RootLayout({
@@ -27,13 +19,13 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${GeistSans.variable} ${GeistMono.variable} h-full antialiased font-sans`}
     >
-      <body className="min-h-full flex flex-col bg-slate-50 text-slate-900">
-        <CanteenProvider>
+      <body className="min-h-full flex flex-col bg-slate-50 text-slate-900 font-sans selection:bg-amber-100 selection:text-amber-900">
+        <LocationsProvider>
           <Navbar />
           {children}
-        </CanteenProvider>
+        </LocationsProvider>
       </body>
     </html>
   );

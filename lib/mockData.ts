@@ -1,8 +1,11 @@
 import {
   CampusService,
   CanteenStatus,
+  DeskReservation,
+  Location,
   Order,
   QueueTicket,
+  QueueToken,
   Room,
 } from "./types";
 
@@ -22,26 +25,33 @@ export function generateOrderId(): string {
   return generateTokenId("ORD");
 }
 
-export const initialCampusServices: CampusService[] = [
+export const initialCampusServices: Location[] = [
   {
     id: "canteen",
     name: "Central Canteen & Cafeteria",
+    type: "canteen",
     category: "canteen",
     icon: "🍲",
     location: "Student Center, Ground Floor",
     queueMinutes: 8,
+    capacity: 150,
+    spotsAvailable: 42,
     rushLevel: "Moderate",
     lastUpdated: "2:14 PM",
     detailsLabel: "Today's Specials",
     items: ["Chole Bhature", "Dosa", "Maggi", "Cold Coffee", "Veg Sandwich"],
+    menu: ["Chole Bhature", "Dosa", "Maggi", "Cold Coffee", "Veg Sandwich"],
   },
   {
     id: "library",
     name: "Central Library & Study Desks",
+    type: "library",
     category: "library",
     icon: "📚",
     location: "Main Library Building",
     queueMinutes: 12,
+    capacity: 120,
+    spotsAvailable: 16,
     rushLevel: "Moderate",
     lastUpdated: "2:10 PM",
     detailsLabel: "Desk & Pod Availability",
@@ -55,10 +65,13 @@ export const initialCampusServices: CampusService[] = [
   {
     id: "xerox",
     name: "Campus Print & Xerox Hub",
+    type: "print-hub",
     category: "xerox",
     icon: "🖨️",
     location: "Academic Block A, Near Stairs",
     queueMinutes: 15,
+    capacity: 25,
+    spotsAvailable: 4,
     rushLevel: "High",
     lastUpdated: "2:12 PM",
     detailsLabel: "Machine Status",
@@ -72,10 +85,13 @@ export const initialCampusServices: CampusService[] = [
   {
     id: "admin",
     name: "Student Affairs & Registrar Office",
+    type: "registrar",
     category: "admin",
     icon: "🏛️",
     location: "Administrative Block, 1st Floor",
     queueMinutes: 22,
+    capacity: 60,
+    spotsAvailable: 12,
     rushLevel: "High",
     lastUpdated: "2:05 PM",
     detailsLabel: "Counter Status",
@@ -89,10 +105,13 @@ export const initialCampusServices: CampusService[] = [
   {
     id: "clinic",
     name: "Campus Health Clinic",
+    type: "clinic",
     category: "clinic",
     icon: "🏥",
     location: "Hostel Zone, Block C Ground Floor",
     queueMinutes: 5,
+    capacity: 20,
+    spotsAvailable: 8,
     rushLevel: "Low",
     lastUpdated: "2:15 PM",
     detailsLabel: "Doctor Availability",
@@ -105,10 +124,13 @@ export const initialCampusServices: CampusService[] = [
   {
     id: "gym",
     name: "University Gym & Fitness Arena",
+    type: "gym",
     category: "gym",
     icon: "🏋️",
     location: "Sports Complex",
     queueMinutes: 10,
+    capacity: 50,
+    spotsAvailable: 18,
     rushLevel: "Moderate",
     lastUpdated: "2:08 PM",
     detailsLabel: "Equipment & Court Status",
@@ -123,12 +145,14 @@ export const initialCampusServices: CampusService[] = [
 
 export const initialCanteenStatus: CanteenStatus = {
   queueMinutes: initialCampusServices[0].queueMinutes,
-  menu: initialCampusServices[0].items,
+  menu: initialCampusServices[0].menu || initialCampusServices[0].items,
   lastUpdated: initialCampusServices[0].lastUpdated,
 };
 
 export const initialOrders: Order[] = [];
 export const initialTickets: QueueTicket[] = [];
+export const initialTokens: QueueToken[] = [];
+export const initialReservations: DeskReservation[] = [];
 
 export const mockRooms: Room[] = [
   { name: "Room 204", building: "Library", free: true },
